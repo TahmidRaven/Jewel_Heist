@@ -43,6 +43,7 @@ export class LightningEffect extends Component {
         const segments = 8;
         const offset = 22;
         const baseColor = new Color().fromHEX(colorHex);
+        const whiteColor = Color.WHITE;
 
         // 1. ULTRA OUTER GLOW (Reacts to pulse)
         this.drawLayer(start, end, segments, offset, 70 + pulse, 20, baseColor); 
@@ -51,7 +52,7 @@ export class LightningEffect extends Component {
         this.drawLayer(start, end, segments, offset, 35 + (pulse * 0.5), 75, baseColor);
 
         // 3. HOT CORE GLOW
-        this.drawLayer(start, end, segments, offset, 15, 170, baseColor);
+        this.drawLayer(start, end, segments, offset, 15, 170, whiteColor);
 
         // 4. THE WHITE BOLT (Sharp and steady)
         this.drawLayer(start, end, segments, offset, 4, 255, Color.WHITE);
