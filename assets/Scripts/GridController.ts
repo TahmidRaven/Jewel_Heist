@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Prefab, instantiate, UITransform, CCInteger, CCFloat, EventTouch, input, Input, v3, Vec3, tween, Color, Animation, isValid, Sprite, ParticleSystem2D, ccenum } from 'cc';
+import { _decorator, Component, Node, Prefab, instantiate, UITransform, CCInteger, CCFloat, EventTouch, input, Input, v3, Vec3, tween, Color, Animation, isValid, Sprite, ParticleSystem2D, ccenum, Tween } from 'cc';
 import { GridPiece } from './GridPiece';
 import { SpecialItemEffects } from './SpecialItemEffects';
 import { GameManager } from './GameManager';
@@ -24,14 +24,12 @@ export class GridController extends Component {
     @property(Prefab) blockDestroyPrefab: Prefab = null;
     @property(Prefab) glowParticlePrefab: Prefab = null; 
 
-    // --- SPARKLE VFX PROPERTIES ---
     @property(Node) 
     public sparkleVFXNode: Node = null!; 
     
     @property({ type: CCFloat, tooltip: "Seconds between random sparkles" })
     public sparkleInterval: number = 2.0;
     private _sparkleTimer: number = 0;
-    // ------------------------------
 
     @property({ type: CCInteger }) rows: number = 9;
     @property({ type: CCInteger }) cols: number = 9;
@@ -84,7 +82,6 @@ export class GridController extends Component {
             return;
         }
 
-        // 1. Idle Hint Timer
         if (this._tutorialHand && !this._tutorialHand.isShowing) {
             this._idleTimer += dt;
             if (this._idleTimer >= this.idleThreshold) {
@@ -93,7 +90,6 @@ export class GridController extends Component {
             }
         }
 
-        // 2. Random Sparkle Timer
         this._sparkleTimer += dt;
         if (this._sparkleTimer >= this.sparkleInterval) {
             this.playRandomSparkle();
@@ -104,12 +100,10 @@ export class GridController extends Component {
     private playRandomSparkle() {
         if (!this.sparkleVFXNode || this.isProcessing) return;
 
-        // Filter for nodes that are dots/balls (must have GridPiece component)
         const activePieces: Node[] = [];
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
                 const node = this.grid[r][c];
-                // GridPiece component confirms it's a dot, not a blocker/brick
                 if (node && node.getComponent(GridPiece)) {
                     activePieces.push(node);
                 }
@@ -118,22 +112,13 @@ export class GridController extends Component {
 
         if (activePieces.length > 0) {
             const target = activePieces[Math.floor(Math.random() * activePieces.length)];
-            
-            // COORDINATE FIX: Ensure sparkle is a child of the GridController node
-            // so target.position and sparkle position share the same space.
             if (this.sparkleVFXNode.parent !== this.node) {
                 this.sparkleVFXNode.parent = this.node;
             }
-
             this.sparkleVFXNode.setPosition(target.position);
-            
-            // Ensure sparkle is drawn on top of the dots
             this.sparkleVFXNode.setSiblingIndex(this.node.children.length - 1);
-            
             const anim = this.sparkleVFXNode.getComponent(Animation);
-            if (anim) {
-                anim.play("sparkleAnim");
-            }
+            if (anim) anim.play("sparkleAnim");
         }
     }
 
@@ -169,7 +154,6 @@ export class GridController extends Component {
         for (let r = 0; r < this.rows; r++) {
             this.grid[r] = [];
             for (let c = 0; c < this.cols; c++) {
-                
                 let isPlayableArea = false;
                 if (this.startPattern === StartPattern.LEFT) {
                     isPlayableArea = (r < this.activeRows && c < this.activeCols);
@@ -185,7 +169,6 @@ export class GridController extends Component {
                     brick.setScale(v3(this.gridScale, this.gridScale, 1));
                     brick.setPosition(v3((c * this.actualCellSize) - offsetX, offsetY - (r * this.actualCellSize), 0));
                     this.grid[r][c] = brick;
-                    
                     let animComp = brick.getComponent(BlockerAnimation) || brick.addComponent(BlockerAnimation);
                     animComp.playIntroEffect(1.25, (r + c) * 0.04);
                 }
@@ -196,26 +179,18 @@ export class GridController extends Component {
     private onGridTouch(event: EventTouch) {
         this._idleTimer = 0;
         if (this.isProcessing || (GameManager.instance && GameManager.instance.isGameOver)) return;
-
-        if (this.instructionBoard && this.instructionBoard.active) {
-            this.instructionBoard.active = false;
-        }
-
+        if (this.instructionBoard && this.instructionBoard.active) this.instructionBoard.active = false;
         if (this._tutorialHand && this._tutorialHand.node.active) {
             this._hasInteracted = true;
             this._tutorialHand.hide();
         }
-
         const uiTransform = this.node.getComponent(UITransform)!;
         const localPos = uiTransform.convertToNodeSpaceAR(v3(event.getUILocation().x, event.getUILocation().y, 0));
         const totalW = (this.cols - 1) * this.actualCellSize;
         const totalH = (this.rows - 1) * this.actualCellSize;
         const c = Math.round((localPos.x + (totalW / 2)) / this.actualCellSize);
         const r = Math.round(((totalH / 2) - localPos.y) / this.actualCellSize);
-        
-        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
-            this.handleCellTap(r, c);
-        }
+        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) this.handleCellTap(r, c);
     }
 
     private handleCellTap(r: number, c: number) {
@@ -300,21 +275,12 @@ export class GridController extends Component {
 
     public playEffect(pos: Vec3, colorId: string) {
         if (!this.blockDestroyPrefab) return;
-
         const effect = instantiate(this.blockDestroyPrefab);
         effect.parent = this.node;
         effect.setPosition(pos);
         effect.setScale(v3(this.gridScale, this.gridScale, 1));
-    
-        if (GameManager.instance) {
-            GameManager.instance.playAudio(colorId === "blocker" ? "BlockDestroy" : "BallDestroy");
-        }
-
-        const colorMap: { [key: string]: string } = {
-            "blue": "#3E6895", "red": "#F7A5B1", "green": "#C0FFDA", 
-            "yellow": "#FBC367", "purple": "#B183E5", "gray": "#C1CADE", "blocker": "#2972C2"
-        };
-
+        if (GameManager.instance) GameManager.instance.playAudio(colorId === "blocker" ? "BlockDestroy" : "BallDestroy");
+        const colorMap: { [key: string]: string } = { "blue": "#3E6895", "red": "#F7A5B1", "green": "#C0FFDA", "yellow": "#FBC367", "purple": "#B183E5", "gray": "#C1CADE", "blocker": "#2972C2" };
         const hex = colorMap[colorId] || "#ffffff";
         const sprite = effect.getComponent(Sprite) || effect.getComponentInChildren(Sprite);
         if (sprite) sprite.color = new Color().fromHEX(hex);
@@ -323,8 +289,6 @@ export class GridController extends Component {
             const particlesNode = instantiate(this.glowParticlePrefab);
             particlesNode.parent = this.node;
             particlesNode.setPosition(pos);
-            particlesNode.setSiblingIndex(this.node.children.length);
-
             const ps2d = particlesNode.getComponent(ParticleSystem2D);
             if (ps2d) {
                 const targetColor = new Color().fromHEX(hex);
@@ -414,11 +378,8 @@ export class GridController extends Component {
         this.scheduleOnce(() => {
             this.node.children.forEach(child => {
                 const piece = child.getComponent(GridPiece);
-                if (piece && (piece.prefabName === "TNT" || piece.prefabName === "ORB")) {
-                    child.setSiblingIndex(this.node.children.length);
-                }
+                if (piece && (piece.prefabName === "TNT" || piece.prefabName === "ORB")) child.setSiblingIndex(this.node.children.length);
             });
-
             if (!GridShuffler.hasValidMoves(this.grid, this.rows, this.cols)) {
                 GridShuffler.shuffle(this.grid, this.rows, this.cols, this.actualCellSize, () => { this.refillGrid(false); });
             } else {
@@ -466,11 +427,8 @@ export class GridController extends Component {
                 const node = this.grid[r][c];
                 const p = node?.getComponent(GridPiece);
                 if (!p || p.prefabName === "TNT" || p.prefabName === "ORB") continue;
-
                 const directions = [{dr:1, dc:0}, {dr:-1, dc:0}, {dr:0, dc:1}, {dr:0, dc:-1}];
-                let hasMatch = false;
-                let touchesBlocker = false;
-
+                let hasMatch = false, touchesBlocker = false;
                 for (const d of directions) {
                     const nr = r + d.dr, nc = c + d.dc;
                     if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols) {
@@ -481,9 +439,7 @@ export class GridController extends Component {
                         if (!np) touchesBlocker = true;
                     }
                 }
-                if (hasMatch && touchesBlocker) {
-                    return node!.getComponent(UITransform)!.convertToWorldSpaceAR(v3(0,0,0));
-                }
+                if (hasMatch && touchesBlocker) return node!.getComponent(UITransform)!.convertToWorldSpaceAR(v3(0,0,0));
             }
         }
         return null;
@@ -493,23 +449,33 @@ export class GridController extends Component {
         this.scheduleOnce(() => {
             let prefabIdx = isInitial && this.initialSpawnQueue.length > 0 ? this.initialSpawnQueue.shift()! : Math.floor(Math.random() * this.ballPrefabs.length);
             if (prefabIdx >= this.ballPrefabs.length) prefabIdx = 0;
-
             const ball = instantiate(this.ballPrefabs[prefabIdx]);
             ball.parent = this.node;
             ball.setScale(v3(this.gridScale, this.gridScale, 1));
             const piece = ball.getComponent(GridPiece) || ball.addComponent(GridPiece);
             piece.row = targetRow; piece.col = c; piece.prefabName = this.ballPrefabs[prefabIdx].name;
-
-            const totalW = (this.cols - 1) * this.actualCellSize;
-            const totalH = (this.rows - 1) * this.actualCellSize;
+            const totalW = (this.cols - 1) * this.actualCellSize, totalH = (this.rows - 1) * this.actualCellSize;
             const startX = (c * this.actualCellSize) - (totalW / 2);
-            const startY = (totalH / 2) + 150;
-            const targetY = (totalH / 2) - (targetRow * this.actualCellSize);
-
+            const startY = (totalH / 2) + 150, targetY = (totalH / 2) - (targetRow * this.actualCellSize);
             ball.setPosition(v3(startX, startY, 0));
             this.grid[targetRow][c] = ball;
             tween(ball).to(0.4, { position: v3(startX, targetY, 0) }, { easing: 'bounceOut' }).start();
         }, delay);
+    }
+
+    // --- ORB_TNT BREATHE ANIMATION LOGIC ---
+    private startItemBreathe(node: Node) {
+        const baseScale = this.gridScale;
+        const shrinkScale = v3(baseScale * 0.85, baseScale * 0.85, 1);
+        const normalScale = v3(baseScale, baseScale, 1);
+
+        tween(node)
+            .to(1.5, { scale: shrinkScale }, { easing: 'sineInOut' })
+            .to(1.5, { scale: normalScale }, { easing: 'sineInOut' })
+            .delay(Math.random() * 0.5) 
+            .union()
+            .repeatForever()
+            .start();
     }
 
     private spawnTNTItem(r: number, c: number) {
@@ -542,7 +508,10 @@ export class GridController extends Component {
 
         tween(item)
             .to(0.2, { scale: v3(this.gridScale, this.gridScale, 1) }, { easing: 'backOut' })
-            .call(() => { this.applyGravity(); })
+            .call(() => { 
+                this.startItemBreathe(item); // Start breathing
+                this.applyGravity(); 
+            })
             .start();
     }
 
@@ -573,6 +542,7 @@ export class GridController extends Component {
             .call(() => {
                 item.angle = 0;
                 tween(item).to(0.6, { angle: -360 }, { easing: 'quadOut' }).start();
+                this.startItemBreathe(item); // Start breathing
                 this.applyGravity();
             })
             .start();
