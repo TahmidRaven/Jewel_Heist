@@ -168,6 +168,9 @@ export class GridController extends Component {
                     brick.parent = this.node;
                     brick.setScale(v3(this.gridScale, this.gridScale, 1));
                     brick.setPosition(v3((c * this.actualCellSize) - offsetX, offsetY - (r * this.actualCellSize), 0));
+                    
+                    brick.angle = Math.floor(Math.random() * 4) * 90; // random rotation 90 mult
+
                     this.grid[r][c] = brick;
                     let animComp = brick.getComponent(BlockerAnimation) || brick.addComponent(BlockerAnimation);
                     animComp.playIntroEffect(1.25, (r + c) * 0.04);
@@ -463,7 +466,6 @@ export class GridController extends Component {
         }, delay);
     }
 
-    // --- ORB_TNT BREATHE ANIMATION LOGIC ---
     private startItemBreathe(node: Node) {
         const baseScale = this.gridScale;
         const shrinkScale = v3(baseScale * 0.85, baseScale * 0.85, 1);
@@ -509,7 +511,7 @@ export class GridController extends Component {
         tween(item)
             .to(0.2, { scale: v3(this.gridScale, this.gridScale, 1) }, { easing: 'backOut' })
             .call(() => { 
-                this.startItemBreathe(item); // Start breathing
+                this.startItemBreathe(item); 
                 this.applyGravity(); 
             })
             .start();
@@ -542,7 +544,7 @@ export class GridController extends Component {
             .call(() => {
                 item.angle = 0;
                 tween(item).to(0.6, { angle: -360 }, { easing: 'quadOut' }).start();
-                this.startItemBreathe(item); // Start breathing
+                this.startItemBreathe(item); 
                 this.applyGravity();
             })
             .start();
