@@ -151,6 +151,7 @@ export class GameManager extends Component {
     private showGameOver(isWin: boolean) {
         if (this._isGameOver) return;
         this._isGameOver = true;
+        this.playAudio("Win");
         AdManager.gameEnd();
         if (this.victoryScreen) {
             this.victoryScreen.active = true;
