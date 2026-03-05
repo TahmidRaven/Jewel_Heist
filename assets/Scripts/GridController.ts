@@ -10,10 +10,6 @@ import { BlockerAnimation } from './BlockerAnimation';
 
 const { ccclass, property } = _decorator;
 
-/**
- * Using String Enums makes debugging easier as the values 
- * show up as "LEFT" or "MIDDLE" in the console.
- */
 enum StartPattern {
     LEFT = 'LEFT',
     MIDDLE = 'MIDDLE'
@@ -26,8 +22,16 @@ export class GridController extends Component {
     @property(Prefab) tntPrefab: Prefab = null;
     @property([Prefab]) orbPrefabs: Prefab[] = [];
     @property(Prefab) blockDestroyPrefab: Prefab = null;
-    
     @property(Prefab) glowParticlePrefab: Prefab = null; 
+
+    // --- SPARKLE VFX PROPERTIES ---
+    @property(Node) 
+    public sparkleVFXNode: Node = null!; 
+    
+    @property({ type: CCFloat, tooltip: "Seconds between random sparkles" })
+    public sparkleInterval: number = 2.0;
+    private _sparkleTimer: number = 0;
+    // ------------------------------
 
     @property({ type: CCInteger }) rows: number = 9;
     @property({ type: CCInteger }) cols: number = 9;
@@ -37,8 +41,7 @@ export class GridController extends Component {
         type: ccenum(StartPattern), 
         tooltip: "Choose where the balls initially spawn: LEFT (cols 0-2) or MIDDLE (cols 3-5)" 
     })
-    public startPattern: StartPattern = StartPattern.MIDDLE;  // MIDDLE or LEFT -> initial balls
-
+    public startPattern: StartPattern = StartPattern.MIDDLE;
 
     @property(LightningEffect) lightning: LightningEffect = null;
     @property(Node) lightningAnimNode: Node = null!; 
@@ -81,11 +84,55 @@ export class GridController extends Component {
             return;
         }
 
+        // 1. Idle Hint Timer
         if (this._tutorialHand && !this._tutorialHand.isShowing) {
             this._idleTimer += dt;
             if (this._idleTimer >= this.idleThreshold) {
                 this.showIdleHint();
                 this._idleTimer = 0;
+            }
+        }
+
+        // 2. Random Sparkle Timer
+        this._sparkleTimer += dt;
+        if (this._sparkleTimer >= this.sparkleInterval) {
+            this.playRandomSparkle();
+            this._sparkleTimer = 0;
+        }
+    }
+
+    private playRandomSparkle() {
+        if (!this.sparkleVFXNode || this.isProcessing) return;
+
+        // Filter for nodes that are dots/balls (must have GridPiece component)
+        const activePieces: Node[] = [];
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                const node = this.grid[r][c];
+                // GridPiece component confirms it's a dot, not a blocker/brick
+                if (node && node.getComponent(GridPiece)) {
+                    activePieces.push(node);
+                }
+            }
+        }
+
+        if (activePieces.length > 0) {
+            const target = activePieces[Math.floor(Math.random() * activePieces.length)];
+            
+            // COORDINATE FIX: Ensure sparkle is a child of the GridController node
+            // so target.position and sparkle position share the same space.
+            if (this.sparkleVFXNode.parent !== this.node) {
+                this.sparkleVFXNode.parent = this.node;
+            }
+
+            this.sparkleVFXNode.setPosition(target.position);
+            
+            // Ensure sparkle is drawn on top of the dots
+            this.sparkleVFXNode.setSiblingIndex(this.node.children.length - 1);
+            
+            const anim = this.sparkleVFXNode.getComponent(Animation);
+            if (anim) {
+                anim.play("sparkleAnim");
             }
         }
     }
@@ -124,8 +171,6 @@ export class GridController extends Component {
             for (let c = 0; c < this.cols; c++) {
                 
                 let isPlayableArea = false;
-
-                // Logic switch using the readable Enum names
                 if (this.startPattern === StartPattern.LEFT) {
                     isPlayableArea = (r < this.activeRows && c < this.activeCols);
                 } else if (this.startPattern === StartPattern.MIDDLE) {
@@ -285,8 +330,6 @@ export class GridController extends Component {
                 const targetColor = new Color().fromHEX(hex);
                 ps2d.startColor = targetColor.clone();
                 ps2d.endColor = targetColor.clone();
-                ps2d.startColorVar = new Color(0, 0, 0, 0);
-                ps2d.endColorVar = new Color(0, 0, 0, 0);
                 ps2d.resetSystem(); 
             }
         }
@@ -476,20 +519,14 @@ export class GridController extends Component {
 
     private spawnOrbItem(r: number, c: number, colorId: string = "") {
         const orbPrefab = this.orbPrefabs.find(p => p.name.toLowerCase().includes(colorId.toLowerCase()));
-        if (!orbPrefab) { 
-            this.applyGravity(); 
-            return; 
-        }
+        if (!orbPrefab) { this.applyGravity(); return; }
         
         const item = instantiate(orbPrefab);
         item.parent = this.node;
         item.setSiblingIndex(this.node.children.length);
 
         const piece = item.getComponent(GridPiece) || item.addComponent(GridPiece);
-        piece.row = r; 
-        piece.col = c; 
-        piece.prefabName = "ORB"; 
-        piece.colorId = colorId;
+        piece.row = r; piece.col = c; piece.prefabName = "ORB"; piece.colorId = colorId;
         
         const offsetX = (this.cols - 1) * this.actualCellSize / 2;
         const offsetY = (this.rows - 1) * this.actualCellSize / 2;
@@ -535,10 +572,7 @@ export class GridController extends Component {
             .to(0.2, { scale: v3(this.gridScale, this.gridScale, 1) }, { easing: 'backOut' })
             .call(() => {
                 item.angle = 0;
-                tween(item)
-                    .to(0.6, { angle: -360 }, { easing: 'quadOut' })
-                    .start();
-
+                tween(item).to(0.6, { angle: -360 }, { easing: 'quadOut' }).start();
                 this.applyGravity();
             })
             .start();
